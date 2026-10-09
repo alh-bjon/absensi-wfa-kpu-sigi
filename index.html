@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Absensi WFA - KPU Sigi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card { border: none; border-radius: 12px; }
+        .navbar-brand { font-weight: 600; letter-spacing: 0.5px; }
+        .btn-custom { border-radius: 8px; padding: 10px; font-weight: 500; }
+        .form-control, .form-select { border-radius: 8px; padding: 10px 14px; }
+        .badge-sesi { font-size: 0.9rem; padding: 6px 12px; }
+        .clock-display { font-family: 'Courier New', monospace; font-size: 1.4rem; font-weight: 700; color: #198754; }
+        .server-badge { font-size: 0.75rem; padding: 4px 10px; }
+        .info-jadwal { font-size: 0.85rem; }
+
+        /* === POP-UP BUKTI ABSENSI === */
+        .bukti-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 15px;
+            overflow-y: auto;
+        }
+        .bukti-overlay.show { display: flex; }
+
+        .bukti-card {
+            background: #fff;
+            border-radius: 14px;
+            max-width: 380px;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+            overflow: hidden;
+            animation: buktiIn 0.3s ease-out;
+        }
+        @keyframes buktiIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to   { transform: scale(1);   opacity: 1; }
+        }
+
+        .bukti-header {
+            background: linear-gradient(135deg, #198754, #146c43);
+            color: #fff;
+            padding: 14px 16px;
+            text-align: center;
+        }
+        .bukti-header h4 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        .bukti-header .check-icon {
+            font-size: 2rem;
+            display: block;
+            margin-bottom: 6px;
+            color: #fff;
+        }
+
+        .bukti-body { padding: 16px; }
+        .bukti-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px dashed #e5e5e5;
+            font-size: 0.9rem;
+        }
+        .bukti-row:last-child { border-bottom: none; }
+        .bukti-row .label { color: #6c757d; font-weight: 500; }
+        .bukti-row .value {
+            color: #212529;
+            font-weight: 600;
+            text-align: right;
+            max-width: 60%;
+            word-break: break-word;
+        }
+
+        .bukti-divider {
+            border: none;
+            border-top: 1px solid #dee2e6;
+            margin: 14px 0;
+        }
+
+        .bukti-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .bukti-status.tepat { background: #d1e7dd; color: #0f5132; }
+        .bukti-status.telat { background: #fff3cd; color: #664d03; }
+
+        .bukti-reminder {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-left: 4px solid #ffc107;
+            padding: 12px 14px;
+            border-radius: 8px;
+            margin-top: 14px;
+            font-size: 0.9rem;
+            color: #664d03;
+        }
+        .bukti-reminder b { color: #856404; }
+        .bukti-reminder .reminder-title {
+            font-size: 0.8rem;
+            letter-spacing: 0.5px;
+            color: #997404;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+            font-weight: 700;
+        }
+
+        .bukti-note {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 14px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            line-height: 1.5;
+        }
+        .bukti-note i { color: #198754; }
+
+        .bukti-actions {
+            display: flex;
+            gap: 8px;
+            padding: 0 16px 16px;
+        }
+        .bukti-actions .btn { flex: 1; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm py-3">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-fingerprint text-success me-2"></i>E-Absensi WFA <span class="text-success">KPU Sigi</span>
+            </a>
+            <div class="navbar-nav ms-auto">
+                <button class="btn btn-outline-light btn-sm me-2 active rounded-pill px-3" id="navForm" onclick="switchTab('form')">
+                    <i class="fas fa-user-clock me-1"></i> Form Absen
+                </button>
+                <button class="btn btn-outline-success btn-sm rounded-pill px-3" id="navAdmin" onclick="requestAdminAccess()">
+                    <i class="fas fa-cogs me-1"></i> Panel Admin
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+
+        <!-- ================= FORM ABSENSI ================= -->
+        <div id="sectionForm" class="row justify-content-center">
+            <div class="col-lg-6 col-md-8">
+                <div class="card shadow-lg">
+                    <div class="card-header bg-success text-white py-3 text-center rounded-top-4">
+                        <h4 class="mb-0"><i class="fas fa-clipboard-user me-2"></i>Form Absensi Pegawai WFA</h4>
+                        <p class="small mb-0 text-white-50 mt-1">Silakan lakukan absensi sesuai jadwal sesi yang ditentukan</p>
+                    </div>
+                    <div class="card-body p-4">
+
+                        <div class="d-flex justify-content-between align-items-center bg-light p-3 rounded-3 border mb-3">
+                            <div>
+                                <div class="small text-muted mb-1">WAKTU SERVER</div>
+                                <div class="clock-display" id="clockServer">--:--:--</div>
+                                <div class="small text-muted" id="dateServer">-</div>
+                            </div>
+                            <span class="badge bg-success server-badge" id="serverStatus">
+                                <i class="fas fa-circle-notch fa-spin me-1"></i> Menghubungkan
+                            </span>
+                        </div>
+
+                        <div class="alert alert-secondary info-jadwal py-2 mb-3" id="infoJadwal">
+                            <i class="fas fa-info-circle me-1"></i> Memuat jadwal WFA...
+                        </div>
+
+                        <div id="systemStatusAlert" class="alert alert-info shadow-sm mb-4">
+                            <i class="fas fa-spinner fa-spin me-2"></i> Memeriksa sistem absensi...
+                        </div>
+
+                        <div id="alertBox" class="alert d-none shadow-sm" role="alert"></div>
+
+                        <form id="absensiForm" autocomplete="off">
+                            <div class="mb-3">
+                                <label for="nama" class="form-label fw-semibold text-secondary">
+                                    <i class="fas fa-user me-1 text-success"></i> Nama Lengkap
+                                </label>
+                                <input type="text" class="form-control" id="nama" required placeholder="Contoh: Ahmad Taufik, S.Sos">
+                            </div>
+                            <div class="mb-3">
+                                <label for="nip" class="form-label fw-semibold text-secondary">
+                                    <i class="fas fa-id-card me-1 text-success"></i> NIP / Nomor Identitas
+                                </label>
+                                <input type="text" class="form-control" id="nip" required placeholder="Masukkan NIP Anda" inputmode="numeric">
+                            </div>
+                            <div class="mb-3">
+                                <label for="jabatan" class="form-label fw-semibold text-secondary">
+                                    <i class="fas fa-briefcase me-1 text-success"></i> Jabatan
+                                </label>
+                                <input type="text" class="form-control" id="jabatan" required placeholder="Contoh: Staf Sub Bagian Teknis">
+                            </div>
+
+                            <hr class="my-4 text-muted">
+
+                            <div class="row align-items-center mb-4 bg-light p-3 rounded-3 border">
+                                <div class="col-md-6 mb-3 mb-md-0">
+                                    <label class="form-label small text-muted d-block mb-1">DETEKSI SESI OTOMATIS</label>
+                                    <span id="badgeSesiOtomatis" class="badge bg-secondary badge-sesi">Menunggu Waktu...</span>
+                                    <input type="hidden" id="sesiOtomatisVal">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted d-block mb-1">LOKASI WFA</label>
+                                    <button type="button" class="btn btn-outline-dark btn-sm w-100 py-2" id="btnGPS" onclick="getGPSLocation()">
+                                        <i class="fas fa-map-marker-alt text-danger me-1"></i> Ambil Titik GPS
+                                    </button>
+                                    <input type="hidden" id="gpsCoord" required>
+                                    <small id="gpsStatus" class="text-danger d-block mt-1 small">GPS belum diaktifkan.</small>
+                                </div>
+                            </div>
+
+                            <button type="submit" id="submitBtn" class="btn btn-success w-100 btn-custom shadow" disabled>
+                                <i class="fas fa-paper-plane me-1"></i> Kirim Kehadiran Sekarang
+                            </button>
+                        </form>
+
+                        <div id="riwayatBox" class="mt-4 d-none">
+                            <hr class="my-3">
+                            <h6 class="text-muted small mb-2"><i class="fas fa-history me-1"></i> RIWAYAT ANDA HARI INI</h6>
+                            <ul class="list-group list-group-flush" id="riwayatList"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= PANEL ADMIN ================= -->
+        <div id="sectionAdmin" class="row d-none">
+            <div class="col-md-12">
+                <div class="card shadow mb-4">
+                    <div class="card-header bg-dark text-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h4 class="mb-0">
+                            <i class="fas fa-sliders-h me-2"></i>Panel Kontrol Jam & Hari Operasional Absensi
+                        </h4>
+                        <div>
+                            <a href="#" id="btnSpreadsheet" target="_blank" rel="noopener" class="btn btn-success btn-sm me-2">
+                                <i class="fas fa-file-excel me-1"></i> Buka Spreadsheet
+                            </a>
+                            <button class="btn btn-outline-light btn-sm" onclick="logoutAdmin()">
+                                <i class="fas fa-sign-out-alt me-1"></i> Keluar Admin
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body bg-white p-4">
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label fw-bold">Pilih Hari Aktif WFA:</label>
+                                <div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input day-check" type="checkbox" value="1" id="daySenin"><label class="form-check-label" for="daySenin">Senin</label></div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input day-check" type="checkbox" value="2" id="daySelasa"><label class="form-check-label" for="daySelasa">Selasa</label></div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input day-check" type="checkbox" value="3" id="dayRabu"><label class="form-check-label" for="dayRabu">Rabu</label></div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input day-check" type="checkbox" value="4" id="dayKamis"><label class="form-check-label" for="dayKamis">Kamis</label></div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input day-check" type="checkbox" value="5" id="dayJumat"><label class="form-check-label" for="dayJumat">Jumat</label></div>
+                                    <div class="form-check form-check-inline"><input class="form-check-input day-check" type="checkbox" value="6" id="daySabtu"><label class="form-check-label" for="daySabtu">Sabtu</label></div>
+                                </div>
+                            </div>
+
+                            <div class="col-md-4 border-end">
+                                <h6 class="text-primary fw-bold"><i class="fas fa-sun me-1"></i> Sesi Pagi</h6>
+                                <div class="mb-2"><label class="form-label small">Buka:</label><input type="time" class="form-control" id="cfgPagiOn" value="07:30"></div>
+                                <div class="mb-2"><label class="form-label small">Tutup:</label><input type="time" class="form-control" id="cfgPagiOff" value="08:30"></div>
+                            </div>
+                            <div class="col-md-4 border-end">
+                                <h6 class="text-warning fw-bold"><i class="fas fa-cloud-sun me-1"></i> Sesi Siang</h6>
+                                <div class="mb-2"><label class="form-label small">Buka:</label><input type="time" class="form-control" id="cfgSiangOn" value="11:30"></div>
+                                <div class="mb-2"><label class="form-label small">Tutup:</label><input type="time" class="form-control" id="cfgSiangOff" value="12:30"></div>
+                            </div>
+                            <div class="col-md-4">
+                                <h6 class="text-danger fw-bold"><i class="fas fa-moon me-1"></i> Sesi Sore</h6>
+                                <div class="mb-2"><label class="form-label small">Buka:</label><input type="time" class="form-control" id="cfgSoreOn" value="16:00"></div>
+                                <div class="mb-2"><label class="form-label small">Tutup:</label><input type="time" class="form-control" id="cfgSoreOff" value="18:00"></div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary mt-3 px-4 py-2" onclick="simpanPengaturanAdmin()">
+                            <i class="fas fa-save me-1"></i> Simpan Pengaturan Jam ke Server
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card shadow">
+                    <div class="card-header bg-secondary text-white py-3 d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0"><i class="fas fa-table me-2"></i>Laporan Kehadiran Pegawai</h4>
+                        <button class="btn btn-light btn-sm" onclick="loadAdminData()">
+                            <i class="fas fa-sync-alt me-1"></i> Refresh
+                        </button>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Waktu Submit</th>
+                                        <th>Nama Pegawai</th>
+                                        <th>NIP</th>
+                                        <th>Jabatan</th>
+                                        <th>Sesi</th>
+                                        <th>Status</th>
+                                        <th>GPS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableDataBody">
+                                    <tr><td colspan="7" class="text-center py-4 text-muted">Memuat data...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- === POP-UP BUKTI ABSENSI === -->
+    <div class="bukti-overlay" id="buktiOverlay">
+        <div class="bukti-card">
+            <div class="bukti-header">
+                <i class="fas fa-check-circle check-icon"></i>
+                <h4>ABSENSI BERHASIL</h4>
+            </div>
+            <div class="bukti-body">
+                <div class="bukti-row">
+                    <span class="label">Nama</span>
+                    <span class="value" id="buktiNama">-</span>
+                </div>
+                <div class="bukti-row">
+                    <span class="label">NIP</span>
+                    <span class="value" id="buktiNip">-</span>
+                </div>
+                <div class="bukti-row">
+                    <span class="label">Jabatan</span>
+                    <span class="value" id="buktiJabatan">-</span>
+                </div>
+
+                <hr class="bukti-divider">
+
+                <div class="bukti-row">
+                    <span class="label">Sesi</span>
+                    <span class="value" id="buktiSesi">-</span>
+                </div>
+                <div class="bukti-row">
+                    <span class="label">Status</span>
+                    <span class="value"><span id="buktiStatus" class="bukti-status tepat">-</span></span>
+                </div>
+                <div class="bukti-row">
+                    <span class="label">Waktu</span>
+                    <span class="value" id="buktiWaktu">-</span>
+                </div>
+                <div class="bukti-row">
+                    <span class="label">Lokasi</span>
+                    <span class="value" id="buktiLokasi">-</span>
+                </div>
+
+                <div class="bukti-reminder" id="buktiReminder">
+                    <div class="reminder-title">🔔 Pengingat</div>
+                    <div id="buktiReminderText">-</div>
+                </div>
+
+                <div class="bukti-note">
+                    <i class="fas fa-camera"></i>
+                    <b>Screenshot halaman ini</b> sebagai bukti kehadiran Anda, lalu kirim ke grup WhatsApp dinas.
+                </div>
+            </div>
+            <div class="bukti-actions">
+                <button class="btn btn-outline-secondary" onclick="copyBuktiTeks()">
+                    <i class="fas fa-copy me-1"></i> Salin Teks
+                </button>
+                <button class="btn btn-success" onclick="tutupBukti()">
+                    <i class="fas fa-check me-1"></i> Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================================
+        // ⚙️ KONFIGURASI — GANTI DI SINI
+        // ==========================================================
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxa0DMF8xJg91CYNahqPRN0mrFDB8mJcTAk7kBMM3VmCcRXkPGfzrufZ7UyDVPtFqFh/exec";
+
+        // ⬇️⬇️⬇️ GANTI dengan URL Spreadsheet kamu ⬇️⬇️⬇️
+        const SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1-1iCInA6OuGXd0s5bxX05d_hMDD-LiRiR_ZZKY0YO60/edit?gid=1615598618#gid=1615598618";
+
+        const ADMIN_AUTO_REFRESH = true;
+        // ==========================================================
+
+        // ==================== STATE ====================
+        let adminToken = sessionStorage.getItem("adminToken") || null;
+        let configJadwal = {
+            hariAktif: [3],
+            pagi:  { on: "07:30", off: "08:30" },
+            siang: { on: "11:30", off: "12:30" },
+            sore:  { on: "16:00", off: "18:00" }
+        };
+        let serverTimeOffset = 0;
+        let adminRefreshInterval = null;
+        const HARI_NAMA = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+
+        // ==================== UTIL ====================
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function isAdminError(msg) {
+            return msg && msg.toLowerCase().indexOf("admin") !== -1;
+        }
+
+        // ==================== TAB ====================
+        function switchTab(tab) {
+            if (tab === 'form') {
+                document.getElementById('sectionForm').classList.remove('d-none');
+                document.getElementById('sectionAdmin').classList.add('d-none');
+                document.getElementById('navForm').classList.add('active');
+                document.getElementById('navAdmin').classList.remove('active');
+                cekStatusSistemRealtime();
+                stopAdminRefresh();
+            } else {
+                if (!adminToken) { requestAdminAccess(); return; }
+                document.getElementById('sectionForm').classList.add('d-none');
+                document.getElementById('sectionAdmin').classList.remove('d-none');
+                document.getElementById('navAdmin').classList.add('active');
+                document.getElementById('navForm').classList.remove('active');
+                loadAdminData();
+                if (ADMIN_AUTO_REFRESH) startAdminRefresh();
+            }
+        }
+
+        function startAdminRefresh() {
+            stopAdminRefresh();
+            adminRefreshInterval = setInterval(() => {
+                if (!document.getElementById('sectionAdmin').classList.contains('d-none')) {
+                    loadAdminData();
+                }
+            }, 30000);
+        }
+
+        function stopAdminRefresh() {
+            if (adminRefreshInterval) {
+                clearInterval(adminRefreshInterval);
+                adminRefreshInterval = null;
+            }
+        }
+
+        // ==================== AUTH ADMIN ====================
+        function requestAdminAccess() {
+            if (adminToken) { switchTab('admin'); return; }
+            let pass = prompt("Masukkan Sandi Panel Admin:");
+            if (pass === null || pass === "") return;
+
+            fetch(WEB_APP_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: "loginAdmin", password: pass })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    adminToken = res.token;
+                    sessionStorage.setItem("adminToken", adminToken);
+                    alert("Login berhasil. Sesi aktif 30 menit.");
+                    switchTab('admin');
+                } else {
+                    alert("Gagal: " + (res.message || "Sandi salah."));
+                }
+            })
+            .catch(() => alert("Tidak dapat menghubungi server. Cek koneksi internet."));
+        }
+
+        function logoutAdmin() {
+            if (adminToken) {
+                fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: "logoutAdmin", token: adminToken })
+                }).catch(() => {});
+            }
+            adminToken = null;
+            sessionStorage.removeItem("adminToken");
+            alert("Anda telah keluar dari Panel Admin.");
+            switchTab('form');
+        }
+
+        // ==================== LOAD CONFIG ====================
+        function loadConfigJadwal() {
+            return fetch(`${WEB_APP_URL}?action=getConfig`)
+                .then(res => res.json())
+                .then(result => {
+                    if (result.status === 'success' && result.config) {
+                        configJadwal = result.config;
+
+                        if (result.serverTime) {
+                            const serverMs = new Date(result.serverTime.replace(' ', 'T')).getTime();
+                            if (!isNaN(serverMs)) {
+                                serverTimeOffset = serverMs - Date.now();
+                            }
+                        }
+
+                        document.getElementById('cfgPagiOn').value   = configJadwal.pagi.on;
+                        document.getElementById('cfgPagiOff').value  = configJadwal.pagi.off;
+                        document.getElementById('cfgSiangOn').value  = configJadwal.siang.on;
+                        document.getElementById('cfgSiangOff').value = configJadwal.siang.off;
+                        document.getElementById('cfgSoreOn').value   = configJadwal.sore.on;
+                        document.getElementById('cfgSoreOff').value  = configJadwal.sore.off;
+
+                        document.querySelectorAll('.day-check').forEach(el => {
+                            el.checked = configJadwal.hariAktif.includes(parseInt(el.value));
+                        });
+
+                        const badge = document.getElementById('serverStatus');
+                        badge.className = "badge bg-success server-badge";
+                        badge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Terhubung';
+
+                        updateInfoJadwal();
+                    }
+                    cekStatusSistemRealtime();
+                })
+                .catch(() => {
+                    const badge = document.getElementById('serverStatus');
+                    badge.className = "badge bg-danger server-badge";
+                    badge.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i> Offline';
+                    document.getElementById('infoJadwal').innerHTML =
+                        '<i class="fas fa-exclamation-triangle me-1 text-danger"></i> Tidak dapat memuat jadwal. Cek koneksi internet.';
+                    cekStatusSistemRealtime();
+                });
+        }
+
+        function updateInfoJadwal() {
+            const el = document.getElementById('infoJadwal');
+            const hariAktifNama = configJadwal.hariAktif
+                .map(d => HARI_NAMA[d])
+                .join(', ');
+            el.innerHTML = `<i class="fas fa-calendar-check me-1 text-primary"></i> <b>Jadwal WFA:</b> ${hariAktifNama || '(belum diset)'} 
+                &mdash; Pagi <b>${configJadwal.pagi.on}–${configJadwal.pagi.off}</b>, 
+                Siang <b>${configJadwal.siang.on}–${configJadwal.siang.off}</b>, 
+                Sore <b>${configJadwal.sore.on}–${configJadwal.sore.off}</b>`;
+        }
+
+        // ==================== SIMPAN CONFIG ====================
+        function simpanPengaturanAdmin() {
+            configJadwal.pagi.on   = document.getElementById('cfgPagiOn').value;
+            configJadwal.pagi.off  = document.getElementById('cfgPagiOff').value;
+            configJadwal.siang.on  = document.getElementById('cfgSiangOn').value;
+            configJadwal.siang.off = document.getElementById('cfgSiangOff').value;
+            configJadwal.sore.on   = document.getElementById('cfgSoreOn').value;
+            configJadwal.sore.off  = document.getElementById('cfgSoreOff').value;
+
+            let checkedDays = [];
+            document.querySelectorAll('.day-check:checked').forEach(el => checkedDays.push(parseInt(el.value)));
+            configJadwal.hariAktif = checkedDays;
+
+            fetch(WEB_APP_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: "saveConfig", token: adminToken, config: configJadwal })
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    alert("Pengaturan berhasil disimpan.");
+                    updateInfoJadwal();
+                    switchTab('form');
+                } else {
+                    alert("Gagal: " + res.message);
+                    if (isAdminError(res.message)) {
+                        adminToken = null;
+                        sessionStorage.removeItem("adminToken");
+                    }
+                }
+            })
+            .catch(() => alert("Gagal menyimpan ke server."));
+        }
+
+        // ==================== JAM & STATUS ====================
+        function getServerNow() {
+            return new Date(Date.now() + serverTimeOffset);
+        }
+
+        function updateClockDisplay() {
+            const now = getServerNow();
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('clockServer').innerText = `${hh}:${mm}:${ss}`;
+
+            const blnArr = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+            document.getElementById('dateServer').innerText =
+                `${HARI_NAMA[now.getDay()]}, ${now.getDate()} ${blnArr[now.getMonth()]} ${now.getFullYear()}`;
+        }
+
+        function cekStatusSistemRealtime() {
+            const now = getServerNow();
+            const currentDay = now.getDay();
+            const currentTime = String(now.getHours()).padStart(2, '0') + ":" + String(now.getMinutes()).padStart(2, '0');
+
+            const alertBox = document.getElementById('systemStatusAlert');
+            const badgeSesi = document.getElementById('badgeSesiOtomatis');
+            const sesiValInput = document.getElementById('sesiOtomatisVal');
+            const submitBtn = document.getElementById('submitBtn');
+
+            if (configJadwal.hariAktif.indexOf(currentDay) === -1) {
+                alertBox.className = "alert alert-danger shadow-sm mb-4";
+                alertBox.innerHTML = `<i class="fas fa-ban me-2"></i><b>Absensi Ditutup:</b> Hari ini bukan jadwal WFA.`;
+                badgeSesi.className = "badge bg-secondary badge-sesi";
+                badgeSesi.innerText = "Tidak Ada Sesi Aktif";
+                sesiValInput.value = "";
+                submitBtn.disabled = true;
+                return;
+            }
+
+            let activeSesi = "";
+            if (currentTime >= configJadwal.pagi.on && currentTime <= configJadwal.pagi.off) {
+                activeSesi = "Pagi";
+            } else if (currentTime >= configJadwal.siang.on && currentTime <= configJadwal.siang.off) {
+                activeSesi = "Siang";
+            } else if (currentTime >= configJadwal.sore.on && currentTime <= configJadwal.sore.off) {
+                activeSesi = "Sore";
+            }
+
+            if (activeSesi !== "") {
+                alertBox.className = "alert alert-success shadow-sm mb-4";
+                alertBox.innerHTML = `<i class="fas fa-check-circle me-2"></i><b>Absensi Dibuka:</b> Sesi <b>${activeSesi}</b> sedang berlangsung.`;
+                badgeSesi.className = "badge bg-success badge-sesi";
+                badgeSesi.innerText = `Sesi ${activeSesi} (Otomatis)`;
+                sesiValInput.value = activeSesi;
+                submitBtn.disabled = document.getElementById('gpsCoord').value === "";
+            } else {
+                alertBox.className = "alert alert-warning shadow-sm mb-4";
+                alertBox.innerHTML = `<i class="fas fa-clock me-2"></i><b>Diluar Jam Absen:</b> Saat ini tidak ada sesi yang dibuka.`;
+                badgeSesi.className = "badge bg-secondary badge-sesi";
+                badgeSesi.innerText = "Belum / Telah Usai";
+                sesiValInput.value = "";
+                submitBtn.disabled = true;
+            }
+        }
+
+        // ==================== GPS ====================
+        function getGPSLocation() {
+            const statusText = document.getElementById('gpsStatus');
+            const btn = document.getElementById('btnGPS');
+            if (!navigator.geolocation) {
+                statusText.innerText = "Geolocation tidak didukung browser ini.";
+                return;
+            }
+            statusText.innerText = "Mendeteksi koordinat...";
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Mencari lokasi...';
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude.toFixed(6);
+                    const lon = position.coords.longitude.toFixed(6);
+                    const coordStr = `${lat}, ${lon}`;
+                    document.getElementById('gpsCoord').value = coordStr;
+                    statusText.innerHTML = `<span class="text-success fw-bold"><i class="fas fa-check-circle"></i> ${coordStr}</span>`;
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-map-marker-alt text-danger me-1"></i> Ambil Ulang GPS';
+                    cekStatusSistemRealtime();
+                },
+                (err) => {
+                    let msg = "Gagal mendeteksi GPS.";
+                    if (err.code === 1) msg = "Akses lokasi ditolak. Izinkan di pengaturan browser.";
+                    if (err.code === 2) msg = "Lokasi tidak tersedia. Coba di tempat terbuka.";
+                    if (err.code === 3) msg = "Timeout. Coba lagi.";
+                    statusText.innerHTML = `<span class="text-danger">${msg}</span>`;
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-map-marker-alt text-danger me-1"></i> Ambil Titik GPS';
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        }
+
+        // ==================== SUBMIT ABSEN ====================
+        document.getElementById('absensiForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitBtn');
+            const sesi = document.getElementById('sesiOtomatisVal').value;
+
+            if (!sesi) { alert("Tidak ada sesi aktif saat ini!"); return; }
+
+            const nip = document.getElementById('nip').value.trim();
+            if (nip.length < 6) {
+                showAlert("❌ NIP minimal 6 karakter.", "alert-danger");
+                return;
+            }
+
+            if (!confirm(`Yakin absen sesi ${sesi} sekarang?`)) return;
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Mengirim...';
+
+            const payload = {
+                action: "absen",
+                nama:    document.getElementById('nama').value.trim(),
+                nip:     nip,
+                jabatan: document.getElementById('jabatan').value.trim(),
+                sesi:    sesi,
+                gps:     document.getElementById('gpsCoord').value
+            };
+
+            fetch(WEB_APP_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            })
+            .then(r => r.json())
+            .then(res => {
+                if (res.status === 'success') {
+                    // Tampilkan pop-up bukti absensi
+                    tampilkanBuktiAbsensi({
+                        nama:    payload.nama,
+                        nip:     payload.nip,
+                        jabatan: payload.jabatan,
+                        sesi:    sesi,
+                        status:  res.statusKehadiran,
+                        waktu:   res.serverTime,
+                        lokasi:  payload.gps
+                    });
+
+                    localStorage.setItem("wfa_nip", payload.nip);
+                    localStorage.setItem("wfa_nama", payload.nama);
+                    localStorage.setItem("wfa_jabatan", payload.jabatan);
+                    document.getElementById('gpsCoord').value = "";
+                    document.getElementById('gpsStatus').innerText = "GPS belum diaktifkan.";
+                    document.getElementById('btnGPS').innerHTML = '<i class="fas fa-map-marker-alt text-danger me-1"></i> Ambil Titik GPS';
+                    tambahRiwayat(sesi, res.statusKehadiran, res.serverTime);
+                    cekStatusSistemRealtime();
+                } else if (res.status === 'duplicate') {
+                    showAlert("⚠️ " + escapeHtml(res.message), "alert-warning");
+                } else {
+                    showAlert("❌ " + escapeHtml(res.message || "Gagal."), "alert-danger");
+                }
+            })
+            .catch(() => showAlert("❌ Gagal terhubung ke server. Cek koneksi internet.", "alert-danger"))
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Kirim Kehadiran Sekarang';
+            });
+        });
+
+        function showAlert(msg, type) {
+            const alertBox = document.getElementById('alertBox');
+            alertBox.className = `alert ${type} shadow-sm`;
+            alertBox.innerHTML = msg;
+            alertBox.classList.remove('d-none');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            clearTimeout(alertBox._hideTimer);
+            alertBox._hideTimer = setTimeout(() => {
+                alertBox.classList.add('d-none');
+            }, 30000);
+        }
+
+        function tambahRiwayat(sesi, status, waktu) {
+            const box = document.getElementById('riwayatBox');
+            const list = document.getElementById('riwayatList');
+            box.classList.remove('d-none');
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center';
+            const badgeColor = status === 'Tepat Waktu' ? 'bg-success' : 'bg-warning text-dark';
+            li.innerHTML = `<span><b>${escapeHtml(sesi)}</b> <small class="text-muted">${escapeHtml(waktu)}</small></span>
+                            <span class="badge ${badgeColor}">${escapeHtml(status)}</span>`;
+            list.appendChild(li);
+        }
+
+        // ============================================
+        // POP-UP BUKTI ABSENSI
+        // ============================================
+
+        function tampilkanBuktiAbsensi(data) {
+            document.getElementById('buktiNama').innerText    = data.nama;
+            document.getElementById('buktiNip').innerText     = data.nip;
+            document.getElementById('buktiJabatan').innerText = data.jabatan;
+            document.getElementById('buktiSesi').innerText    = data.sesi;
+            document.getElementById('buktiWaktu').innerText   = data.waktu;
+            document.getElementById('buktiLokasi').innerText  = data.lokasi || '-';
+
+            const statusEl = document.getElementById('buktiStatus');
+            statusEl.innerText = data.status;
+            if (data.status === 'Tepat Waktu') {
+                statusEl.className = 'bukti-status tepat';
+            } else {
+                statusEl.className = 'bukti-status telat';
+            }
+
+            document.getElementById('buktiReminderText').innerHTML = buatPesanPengingat(data.sesi);
+            document.getElementById('buktiOverlay').classList.add('show');
+
+            window._buktiTerakhir = data;
+        }
+
+        function buatPesanPengingat(sesiSelesai) {
+            const c = configJadwal;
+            if (!c) return 'Jangan lupa cek jadwal absensi berikutnya.';
+
+            let pesan = '';
+
+            if (sesiSelesai === 'Pagi') {
+                pesan = `Jangan lupa absen <b>Sesi Siang</b> nanti.<br>
+                         ⏰ Pukul <b>${c.siang.on} – ${c.siang.off}</b>`;
+            } else if (sesiSelesai === 'Siang') {
+                pesan = `Jangan lupa absen <b>Sesi Sore</b> nanti.<br>
+                         ⏰ Pukul <b>${c.sore.on} – ${c.sore.off}</b>`;
+            } else if (sesiSelesai === 'Sore') {
+                pesan = `Terima kasih sudah absen hari ini. 🙏<br>
+                         Sampai jumpa di sesi berikutnya!`;
+            }
+
+            return pesan;
+        }
+
+        function tutupBukti() {
+            document.getElementById('buktiOverlay').classList.remove('show');
+        }
+
+        function copyBuktiTeks() {
+            const d = window._buktiTerakhir;
+            if (!d) return;
+
+            const teks =
+`✅ BUKTI KEHADIRAN WFA KPU SIGI
+
+Nama    : ${d.nama}
+NIP     : ${d.nip}
+Jabatan : ${d.jabatan}
+
+Sesi    : ${d.sesi}
+Status  : ${d.status}
+Waktu   : ${d.waktu}
+Lokasi  : ${d.lokasi || '-'}
+
+Dikirim otomatis oleh E-Absensi WFA KPU Sigi.`;
+
+            navigator.clipboard.writeText(teks).then(() => {
+                const btn = event.currentTarget;
+                const asli = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check me-1"></i> Tersalin!';
+                setTimeout(() => { btn.innerHTML = asli; }, 2000);
+            }).catch(() => {
+                alert('Gagal menyalin. Coba tekan lama untuk copy manual.');
+            });
+        }
+
+        // ==================== ADMIN: LAPORAN ====================
+        function loadAdminData() {
+            const tbody = document.getElementById('tableDataBody');
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Memuat data...</td></tr>`;
+
+            fetch(`${WEB_APP_URL}?action=getData&token=${encodeURIComponent(adminToken)}`)
+                .then(r => r.json())
+                .then(result => {
+                    if (result.status !== 'success') {
+                        if (isAdminError(result.message)) {
+                            adminToken = null;
+                            sessionStorage.removeItem("adminToken");
+                            stopAdminRefresh();
+                            alert("Sesi admin berakhir. Silakan login ulang.");
+                            switchTab('form');
+                            return;
+                        }
+                        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">${escapeHtml(result.message)}</td></tr>`;
+                        return;
+                    }
+                    const data = result.data;
+                    if (data.length === 0) {
+                        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-muted">Belum ada data absensi.</td></tr>`;
+                        return;
+                    }
+                    let html = '';
+                    data.slice().reverse().forEach(item => {
+                        let wkt = item.timestamp ? new Date(item.timestamp).toLocaleString('id-ID') : '-';
+                        let badgeColor = item.statuskehadiran === 'Tepat Waktu' ? 'bg-success' : 'bg-warning text-dark';
+                        const gpsClean = String(item.gps || '').replace(/[^0-9.,\-\s]/g, '');
+                        html += `
+                            <tr>
+                                <td>${escapeHtml(wkt)}</td>
+                                <td><strong class="text-dark">${escapeHtml(item.nama)}</strong></td>
+                                <td>${escapeHtml(item.nip)}</td>
+                                <td>${escapeHtml(item.jabatan)}</td>
+                                <td><span class="badge bg-primary">${escapeHtml(item.sesi)}</span></td>
+                                <td><span class="badge ${badgeColor}">${escapeHtml(item.statuskehadiran || '-')}</span></td>
+                                <td><a href="https://maps.google.com/?q=${encodeURIComponent(gpsClean)}" target="_blank" rel="noopener" class="btn btn-outline-dark btn-sm"><i class="fas fa-map-marker-alt text-danger me-1"></i> Peta</a></td>
+                            </tr>`;
+                    });
+                    tbody.innerHTML = html;
+                })
+                .catch(() => {
+                    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">Kesalahan koneksi.</td></tr>`;
+                });
+        }
+
+        // ==================== INIT ====================
+        window.onload = function() {
+            const btnSS = document.getElementById('btnSpreadsheet');
+            if (SPREADSHEET_URL && SPREADSHEET_URL !== "URL_SPREADSHEET_KAMU") {
+                btnSS.href = SPREADSHEET_URL;
+            } else {
+                btnSS.classList.add('disabled');
+                btnSS.title = "URL Spreadsheet belum dikonfigurasi";
+            }
+
+            const nip     = localStorage.getItem("wfa_nip");
+            const nama    = localStorage.getItem("wfa_nama");
+            const jabatan = localStorage.getItem("wfa_jabatan");
+            if (nip)     document.getElementById('nip').value = nip;
+            if (nama)    document.getElementById('nama').value = nama;
+            if (jabatan) document.getElementById('jabatan').value = jabatan;
+
+            updateClockDisplay();
+            setInterval(updateClockDisplay, 1000);
+
+            loadConfigJadwal();
+            setInterval(cekStatusSistemRealtime, 30000);
+        };
+    </script>
+</body>
+</html>
